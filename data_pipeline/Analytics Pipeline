@@ -1,0 +1,194 @@
+# Analytics Pipeline
+
+# Analytics Pipeline - Titanic Dataset
+
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+
+# ---------------------------------------------------------
+# 1. LOAD AND PROFILE THE DATASET
+# ---------------------------------------------------------
+
+df = sns.load_dataset("titanic")
+
+print("\n========== DATASET INFO ==========")
+df.info()
+
+print("\n========== DESCRIPTIVE STATISTICS ==========")
+print(df.describe(include="all"))
+
+print("\n========== DATASET SHAPE ==========")
+print(df.shape)
+
+print("\n========== MISSING VALUES (%) ==========")
+missing_pct = df.isnull().mean() * 100
+print(missing_pct[missing_pct > 0].sort_values(ascending=False))
+
+# Save the originally loaded dataset
+df.to_csv("analytics/titanic.csv", index=False)
+
+
+# ---------------------------------------------------------
+# 2. MISSING-VALUE HANDLING
+# ---------------------------------------------------------
+
+print("\n========== MISSING VALUES BEFORE CLEANING ==========")
+print(df.isnull().sum())
+
+# Age: 5-30% missing -> median imputation
+df["age"] = df["age"].fillna(df["age"].median())
+
+# Embarked: below 5% missing -> fill with mode
+df["embarked"] = df["embarked"].fillna(df["embarked"].mode()[0])
+
+# Deck has a very high missing rate -> drop the column
+if "deck" in df.columns:
+    df = df.drop(columns=["deck"])
+
+print("\n========== MISSING VALUES AFTER CLEANING ==========")
+print(df.isnull().sum())
+
+# Save cleaned data for the modelling stage
+df.to_csv("analytics/titanic.csv", index=False)
+
+
+# ---------------------------------------------------------
+# 3. UNIVARIATE ANALYSIS - AGE AND FARE
+# ---------------------------------------------------------
+
+def count_iqr_outliers(series):
+    values = series.dropna()
+    q1 = values.quantile(0.25)
+    q3 = values.quantile(0.75)
+    iqr = q3 - q1
+    lower = q1 - 1.5 * iqr
+    upper = q3 + 1.5 * iqr
+    return int(((values < lower) | (values > upper)).sum())
+
+
+for column in ["age", "fare"]:
+
+    print("\n==========", column.upper(), "==========")
+    print("Mean :", df[column].mean())
+    print("Median :", df[column].median())
+    print("Mode :", df[column].mode().iloc[0])
+    print("IQR outliers :", count_iqr_outliers(df[column]))
+
+
+    # Histogram
+    plt.figure(figsize=(7, 4))
+    sns.histplot(df[column].dropna(), kde=True)
+    plt.title(column.title() + " Distribution")
+    plt.xlabel(column.title())
+    plt.ylabel("Count")
+    plt.tight_layout()
+    plt.savefig("analytics/" + column + "_histogram.png")
+    plt.show()
+
+
+    # Box plot
+    plt.figure(figsize=(7, 3))
+    sns.boxplot(x=df[column])
+    plt.title(column.title() + " Box Plot")
+    plt.tight_layout()
+    plt.savefig("analytics/" + column + "_boxplot.png")
+    plt.show()
+
+
+# ---------------------------------------------------------
+# 4. BIVARIATE ANALYSIS
+# ---------------------------------------------------------
+
+print("\n========== SURVIVAL BY SEX ==========")
+print(df.groupby("sex")["survived"].mean())
+
+print("\n========== SURVIVAL BY PCLASS ==========")
+print(df.groupby("pclass")["survived"].mean())
+
+print("\n========== SURVIVAL BY SEX AND PCLASS ==========")
+print(df.groupby(["sex", "pclass"])["survived"].mean())
+
+# ---------------------------------------------------------
+# 5. CORRELATION MATRIX
+# ---------------------------------------------------------
+
+correlation_columns = [
+    "survived",
+    "pclass",
+    "age",
+    "sibsp",
+    "parch",
+    "fare"
+]
+
+correlation = df[correlation_columns].corr()
+
+print("\n========== CORRELATION MATRIX ==========")
+print(correlation)
+
+plt.figure(figsize=(7, 6))
+sns.heatmap(
+    correlation,
+    annot=True,
+    fmt=".2f",
+    cmap="coolwarm"
+)
+plt.title("Titanic Numeric Correlation Matrix")
+plt.tight_layout()
+plt.savefig("analytics/correlation_heatmap.png")
+plt.show()
+
+
+# ---------------------------------------------------------
+# 6. MULTIVARIATE DATA STORY
+# ---------------------------------------------------------
+
+# Chart 1 - Survival by sex
+plt.figure(figsize=(7, 4))
+sns.barplot(data=df, x="sex", y="survived")
+plt.title("Survival Rate by Sex")
+plt.tight_layout()
+plt.savefig("analytics/survival_by_sex.png")
+plt.show()
+
+# Chart 2 - Survival by passenger class
+plt.figure(figsize=(7, 4))
+sns.barplot(data=df, x="pclass", y="survived")
+plt.title("Survival Rate by Passenger Class")
+plt.tight_layout()
+plt.savefig("analytics/survival_by_class.png")
+plt.show()
+
+# Chart 3 - Age by survival
+plt.figure(figsize=(7, 4))
+sns.boxplot(data=df, x="survived", y="age")
+plt.title("Age Distribution by Survival")
+plt.tight_layout()
+plt.savefig("analytics/age_by_survival.png")
+plt.show()
+
+# Chart 4 - Fare by survival
+plt.figure(figsize=(7, 4))
+sns.boxplot(data=df, x="survived", y="fare")
+plt.title("Fare Distribution by Survival")
+plt.tight_layout()
+plt.savefig("analytics/fare_by_survival.png")
+plt.show()
+
+# ---------------------------------------------------------
+# 7. EXPLORATORY STANDARDISATION CHECK
+# ---------------------------------------------------------
+
+for column in ["age", "fare"]:
+    mean_value = df[column].mean()
+    std_value = df[column].std()
+    df[column + "_z"] = (
+         (df[column] - mean_value) / std_value
+    )
+
+print("\n========== STANDARDISATION CHECK ==========")
+print(df[["age_z", "fare_z"]].agg(["mean", "std"]))
+
+print("\n========== EDA COMPLETED ==========")
